@@ -30,7 +30,8 @@
     "prepublishOnly": "pnpm run build"
   },
   "publishConfig": {
-    "access": "public"
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "devDependencies": {
     "tsup": "^8.4.0",

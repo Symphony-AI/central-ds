@@ -58,12 +58,14 @@ central-ds/
 
 ## Packages
 
-| Package | Description | Published? |
-|---------|-------------|------------|
-| `@symphony-ai/central-ds` | Umbrella package — the only one consumers install | ✅ Public (auto-published) |
-| `@symphony-ai/central-ds-react` | React UI components | ✅ Public |
-| `@symphony-ai/central-ds-icons` | SVG icon components | ✅ Public |
-| `@symphony-ai/central-ds-variables` | Design tokens (colors, spacing, typography) | ✅ Public |
+| Package | Description | Registry |
+|---------|-------------|----------|
+| `@symphony-ai/central-ds` | Umbrella package — bundles everything, the only one consumers install | ✅ npm (public) |
+| `@symphony-ai/central-ds-react` | React UI components | 🔒 GitHub Packages (private) |
+| `@symphony-ai/central-ds-icons` | SVG icon components | 🔒 GitHub Packages (private) |
+| `@symphony-ai/central-ds-variables` | Design tokens (colors, spacing, typography) | 🔒 GitHub Packages (private) |
+
+> **Architecture:** Sub-packages are private on GitHub Packages. The umbrella `central-ds` **bundles** all sub-package code at build time, so npm consumers only need `@symphony-ai/central-ds` — no access to private packages required.
 
 ## Development
 
@@ -106,8 +108,8 @@ pnpm dev
 | Workflow | Trigger | Description |
 |----------|---------|-------------|
 | **CI** (`.github/workflows/ci.yml`) | Push / PR to `main` | Builds all packages and runs typecheck |
-| **Publish Sub-Packages** (`.github/workflows/publish-packages.yml`) | Push to `main` (version change in sub-package) | Publishes changed sub-packages to npm, then triggers central-ds update |
-| **Publish Central DS** (`.github/workflows/publish-central-ds.yml`) | Auto (after sub-packages publish) or manual | Updates umbrella package deps to latest npm versions, bumps version, publishes |
+| **Publish Sub-Packages** (`.github/workflows/publish-packages.yml`) | Push to `main` (version change in sub-package) | Publishes changed sub-packages to GitHub Packages (private), then triggers central-ds rebuild |
+| **Publish Central DS** (`.github/workflows/publish-central-ds.yml`) | Auto (after sub-packages update) or manual | Builds & bundles all sub-packages, bumps version, publishes to npm (public) |
 | **Version Bump** (`.github/workflows/version-bump.yml`) | Manual dispatch | Bumps version of one or all sub-packages and pushes to main |
 
 ### How Publishing Works
@@ -121,40 +123,39 @@ pnpm dev
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  "Publish Sub-Packages" workflow detects version change         │
-│  → Builds & publishes changed packages to npm                  │
+│  → Builds & publishes changed packages to GitHub Packages 🔒   │
 │  → Triggers repository_dispatch event                          │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ repository_dispatch
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  "Publish Central DS" workflow                                  │
-│  → Fetches latest versions from npm registry                   │
-│  → Updates central-ds/package.json dependencies                │
+│  → Builds all sub-packages from workspace source               │
+│  → Bundles everything into central-ds (no external deps)       │
 │  → Bumps central-ds version (patch)                            │
-│  → Builds & publishes to npm                                   │
+│  → Publishes to npm (public) 📦                                │
 │  → Commits changes & creates GitHub Release                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Setup Requirements
 
-1. **NPM_TOKEN** — Add an npm access token as a repository secret:
-   - Go to **Settings → Secrets and variables → Actions**
-   - Add `NPM_TOKEN` with your npm publish token
+1. **NPM_TOKEN** — Add an npm **Granular Access Token** as a repository secret:
+   - Go to [npmjs.com](https://www.npmjs.com) → Access Tokens → Generate New Token → **Granular Access Token**
+   - Scope: `@symphony-ai`, Permissions: Read and write
+   - Go to GitHub repo **Settings → Secrets and variables → Actions**
+   - Add `NPM_TOKEN` with the token
 
-2. **Registry** — Configure `.npmrc` for your registry (npm, GitHub Packages, or Azure Artifacts)
+2. **GITHUB_TOKEN** — Automatically provided by GitHub Actions (used for GitHub Packages publishing)
 
 ### Manual Publishing
 
 ```bash
-# Publish a sub-package manually
-pnpm --filter @symphony-ai/central-ds-react publish --access public
-
-# Publish the umbrella package
-pnpm publish:umbrella
+# Publish the umbrella package to npm (bundles all sub-packages)
+pnpm build && pnpm publish:umbrella
 
 # Or from the package directory
-cd packages/central-ds && npm publish --access public
+cd packages/central-ds && pnpm run build && npm publish --access public
 ```
 
 ### Version Bumping

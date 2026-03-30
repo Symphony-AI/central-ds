@@ -1,9 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Publish Central DS — Automatically updates the umbrella package with the
-# latest sub-package versions and publishes to npm.
+# Publish Central DS — Builds the umbrella package (bundling all sub-packages)
+# and publishes to npm as a public package.
+#
+# The sub-packages are private (GitHub Packages), so central-ds bundles their
+# code at build time — consumers only need this single npm package.
 #
 # Triggered by:
-#   1. repository_dispatch from publish-packages.yml (after sub-packages publish)
+#   1. repository_dispatch from publish-packages.yml (after sub-packages update)
 #   2. Manual workflow_dispatch for ad-hoc releases
 # ─────────────────────────────────────────────────────────────────────────────
 name: Publish Central DS
@@ -27,8 +30,8 @@ permissions:
   contents: write
 
 jobs:
-  update-and-publish:
-    name: Update dependencies & publish
+  build-and-publish:
+    name: Build, bundle & publish to npm
     runs-on: ubuntu-latest
 
     steps:
@@ -50,44 +53,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Get latest sub-package versions from npm
-        id: versions
-        run: |
-          get_npm_version() {
-            local pkg_name=$1
-            local version=$(npm view "${pkg_name}" version 2>/dev/null || echo "")
-            echo "$version"
-          }
-
-          REACT_VERSION=$(get_npm_version "@symphony-ai/central-ds-react")
-          ICONS_VERSION=$(get_npm_version "@symphony-ai/central-ds-icons")
-          VARIABLES_VERSION=$(get_npm_version "@symphony-ai/central-ds-variables")
-
-          echo "react=${REACT_VERSION}" >> $GITHUB_OUTPUT
-          echo "icons=${ICONS_VERSION}" >> $GITHUB_OUTPUT
-          echo "variables=${VARIABLES_VERSION}" >> $GITHUB_OUTPUT
-
-          echo "📦 Latest versions:"
-          echo "  react:     ${REACT_VERSION}"
-          echo "  icons:     ${ICONS_VERSION}"
-          echo "  variables: ${VARIABLES_VERSION}"
-
-      - name: Update central-ds dependencies
-        run: |
-          cd packages/central-ds
-
-          # Update dependencies to use exact published versions
-          jq --arg react "${{ steps.versions.outputs.react }}" \
-             --arg icons "${{ steps.versions.outputs.icons }}" \
-             --arg variables "${{ steps.versions.outputs.variables }}" \
-             '.dependencies["@symphony-ai/central-ds-react"] = $react |
-              .dependencies["@symphony-ai/central-ds-icons"] = $icons |
-              .dependencies["@symphony-ai/central-ds-variables"] = $variables' \
-             package.json > package.json.tmp && mv package.json.tmp package.json
-
-          echo "📝 Updated package.json dependencies"
-          jq '.dependencies' package.json
 
       - name: Determine version bump
         id: bump
@@ -119,31 +84,42 @@ jobs:
           echo "version=${NEW_VERSION}" >> $GITHUB_OUTPUT
           echo "📦 Version: ${CURRENT} → ${NEW_VERSION}"
 
-      - name: Reinstall with updated versions
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Build all packages
+      - name: Build all packages (sub-packages first, then central-ds bundles them)
         run: pnpm build
 
-      - name: Typecheck
-        run: pnpm --filter @symphony-ai/central-ds typecheck || true
+      - name: Verify bundle has no external workspace deps
+        run: |
+          echo "Checking that dist doesn't reference private packages..."
+          if grep -r "@symphony-ai/central-ds-react\|@symphony-ai/central-ds-icons\|@symphony-ai/central-ds-variables" packages/central-ds/dist/*.js packages/central-ds/dist/*.cjs 2>/dev/null; then
+            echo "❌ ERROR: Bundle still references private workspace packages!"
+            exit 1
+          else
+            echo "✅ Bundle is self-contained — no private package references"
+          fi
 
-      - name: Publish central-ds
+      - name: Publish central-ds to npm
         run: pnpm --filter @symphony-ai/central-ds publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Commit updated versions
+      - name: Get sub-package versions for release notes
+        id: sub-versions
+        run: |
+          echo "react=$(jq -r '.version' packages/react/package.json)" >> $GITHUB_OUTPUT
+          echo "icons=$(jq -r '.version' packages/icons/package.json)" >> $GITHUB_OUTPUT
+          echo "variables=$(jq -r '.version' packages/variables/package.json)" >> $GITHUB_OUTPUT
+
+      - name: Commit version bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/central-ds/package.json pnpm-lock.yaml
+          git add packages/central-ds/package.json
           git commit -m "chore: release @symphony-ai/central-ds@${{ steps.new-version.outputs.version }}
 
-          Updated dependencies:
-            - @symphony-ai/central-ds-react: ${{ steps.versions.outputs.react }}
-            - @symphony-ai/central-ds-icons: ${{ steps.versions.outputs.icons }}
-            - @symphony-ai/central-ds-variables: ${{ steps.versions.outputs.variables }}" || echo "No changes to commit"
+          Bundled sub-packages:
+            - @symphony-ai/central-ds-react: ${{ steps.sub-versions.outputs.react }}
+            - @symphony-ai/central-ds-icons: ${{ steps.sub-versions.outputs.icons }}
+            - @symphony-ai/central-ds-variables: ${{ steps.sub-versions.outputs.variables }}" || echo "No changes to commit"
           git push
 
       - name: Create GitHub Release
@@ -154,17 +130,19 @@ jobs:
           body: |
             ## @symphony-ai/central-ds@${{ steps.new-version.outputs.version }}
 
-            ### Dependencies
+            ### Bundled Sub-Packages
             | Package | Version |
             |---------|---------|
-            | `@symphony-ai/central-ds-react` | `${{ steps.versions.outputs.react }}` |
-            | `@symphony-ai/central-ds-icons` | `${{ steps.versions.outputs.icons }}` |
-            | `@symphony-ai/central-ds-variables` | `${{ steps.versions.outputs.variables }}` |
+            | `@symphony-ai/central-ds-react` | `${{ steps.sub-versions.outputs.react }}` |
+            | `@symphony-ai/central-ds-icons` | `${{ steps.sub-versions.outputs.icons }}` |
+            | `@symphony-ai/central-ds-variables` | `${{ steps.sub-versions.outputs.variables }}` |
 
             ### Install
             ```bash
             npm install @symphony-ai/central-ds@${{ steps.new-version.outputs.version }}
             ```
+
+            > **Note:** This package bundles all sub-packages. No additional installs needed.
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

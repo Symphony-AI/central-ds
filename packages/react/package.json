@@ -34,7 +34,8 @@
     "react-dom": "^18 || ^19"
   },
   "publishConfig": {
-    "access": "public"
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
   },
   "devDependencies": {
     "react": "^18.3.1",
