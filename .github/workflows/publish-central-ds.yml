@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Publish Central DS — Builds the umbrella package (bundling all sub-packages)
-# and publishes to npm as a public package.
+# and publishes to GitHub Packages.
 #
 # The sub-packages are private (GitHub Packages), so central-ds bundles their
-# code at build time — consumers only need this single npm package.
+# code at build time — consumers only need this single package.
 #
 # Triggered by:
 #   1. repository_dispatch from publish-packages.yml (after sub-packages update)
@@ -28,10 +28,11 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   build-and-publish:
-    name: Build, bundle & publish to npm
+    name: Build, bundle & publish to GitHub Packages
     runs-on: ubuntu-latest
 
     steps:
@@ -49,7 +50,8 @@ jobs:
         with:
           node-version: 20
           cache: pnpm
-          registry-url: "https://registry.npmjs.org"
+          registry-url: "https://npm.pkg.github.com"
+          scope: "@symphony-ai"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -97,10 +99,10 @@ jobs:
             echo "✅ Bundle is self-contained — no private package references"
           fi
 
-      - name: Publish central-ds to npm
-        run: pnpm --filter @symphony-ai/central-ds publish --no-git-checks --access public
+      - name: Publish central-ds to GitHub Packages
+        run: pnpm --filter @symphony-ai/central-ds publish --no-git-checks
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get sub-package versions for release notes
         id: sub-versions
@@ -139,7 +141,7 @@ jobs:
 
             ### Install
             ```bash
-            npm install @symphony-ai/central-ds@${{ steps.new-version.outputs.version }}
+            npm install @symphony-ai/central-ds@${{ steps.new-version.outputs.version }} --registry=https://npm.pkg.github.com
             ```
 
             > **Note:** This package bundles all sub-packages. No additional installs needed.

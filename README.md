@@ -60,12 +60,12 @@ central-ds/
 
 | Package | Description | Registry |
 |---------|-------------|----------|
-| `@symphony-ai/central-ds` | Umbrella package — bundles everything, the only one consumers install | ✅ npm (public) |
-| `@symphony-ai/central-ds-react` | React UI components | 🔒 GitHub Packages (private) |
-| `@symphony-ai/central-ds-icons` | SVG icon components | 🔒 GitHub Packages (private) |
-| `@symphony-ai/central-ds-variables` | Design tokens (colors, spacing, typography) | 🔒 GitHub Packages (private) |
+| `@symphony-ai/central-ds` | Umbrella package — bundles everything, the only one consumers install | 📦 GitHub Packages (public) |
+| `@symphony-ai/central-ds-react` | React UI components | 📦 GitHub Packages |
+| `@symphony-ai/central-ds-icons` | SVG icon components | 📦 GitHub Packages |
+| `@symphony-ai/central-ds-variables` | Design tokens (colors, spacing, typography) | 📦 GitHub Packages |
 
-> **Architecture:** Sub-packages are private on GitHub Packages. The umbrella `central-ds` **bundles** all sub-package code at build time, so npm consumers only need `@symphony-ai/central-ds` — no access to private packages required.
+> **Architecture:** All packages are published to GitHub Packages. The umbrella `central-ds` **bundles** all sub-package code at build time, so consumers only need `@symphony-ai/central-ds`.
 
 ## Development
 
@@ -109,7 +109,7 @@ pnpm dev
 |----------|---------|-------------|
 | **CI** (`.github/workflows/ci.yml`) | Push / PR to `main` | Builds all packages and runs typecheck |
 | **Publish Sub-Packages** (`.github/workflows/publish-packages.yml`) | Push to `main` (version change in sub-package) | Publishes changed sub-packages to GitHub Packages (private), then triggers central-ds rebuild |
-| **Publish Central DS** (`.github/workflows/publish-central-ds.yml`) | Auto (after sub-packages update) or manual | Builds & bundles all sub-packages, bumps version, publishes to npm (public) |
+| **Publish Central DS** (`.github/workflows/publish-central-ds.yml`) | Auto (after sub-packages update) or manual | Builds & bundles all sub-packages, bumps version, publishes to GitHub Packages |
 | **Version Bump** (`.github/workflows/version-bump.yml`) | Manual dispatch | Bumps version of one or all sub-packages and pushes to main |
 
 ### How Publishing Works
@@ -123,7 +123,7 @@ pnpm dev
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  "Publish Sub-Packages" workflow detects version change         │
-│  → Builds & publishes changed packages to GitHub Packages 🔒   │
+│  → Builds & publishes changed packages to GitHub Packages 📦   │
 │  → Triggers repository_dispatch event                          │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ repository_dispatch
@@ -133,29 +133,31 @@ pnpm dev
 │  → Builds all sub-packages from workspace source               │
 │  → Bundles everything into central-ds (no external deps)       │
 │  → Bumps central-ds version (patch)                            │
-│  → Publishes to npm (public) 📦                                │
+│  → Publishes to GitHub Packages 📦                             │
 │  → Commits changes & creates GitHub Release                    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Setup Requirements
 
-1. **NPM_TOKEN** — Add an npm **Granular Access Token** as a repository secret:
-   - Go to [npmjs.com](https://www.npmjs.com) → Access Tokens → Generate New Token → **Granular Access Token**
-   - Scope: `@symphony-ai`, Permissions: Read and write
-   - Go to GitHub repo **Settings → Secrets and variables → Actions**
-   - Add `NPM_TOKEN` with the token
+1. **GITHUB_TOKEN** — Automatically provided by GitHub Actions. No additional secrets needed!
+2. **Repository permissions** — Ensure the repo has **Settings → Actions → General → Workflow permissions** set to **"Read and write permissions"**
 
-2. **GITHUB_TOKEN** — Automatically provided by GitHub Actions (used for GitHub Packages publishing)
+### Consumer Setup
+
+To install `@symphony-ai` packages from GitHub Packages, consumers need to configure their `.npmrc`:
+
+```ini
+# .npmrc (in the consuming project)
+@symphony-ai:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
 
 ### Manual Publishing
 
 ```bash
-# Publish the umbrella package to npm (bundles all sub-packages)
+# Build all packages and publish the umbrella to GitHub Packages
 pnpm build && pnpm publish:umbrella
-
-# Or from the package directory
-cd packages/central-ds && pnpm run build && npm publish --access public
 ```
 
 ### Version Bumping
@@ -181,7 +183,15 @@ git add package.json && git commit -m "chore: bump react version" && git push
 
 ## Auth & Registry
 
-See [`.npmrc`](.npmrc) for registry configuration options. For detailed migration instructions, see [`MIGRATION.md`](MIGRATION.md).
+All `@symphony-ai` packages are published to **GitHub Packages**. See [`.npmrc`](.npmrc) for registry configuration. For detailed migration instructions, see [`MIGRATION.md`](MIGRATION.md).
+
+To install packages, consumers need a GitHub token with `read:packages` scope:
+
+```ini
+# Consumer's .npmrc
+@symphony-ai:registry=https://npm.pkg.github.com/
+//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+```
 
 ## License
 
