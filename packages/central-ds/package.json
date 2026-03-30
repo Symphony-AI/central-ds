@@ -50,12 +50,10 @@
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19"
   },
-  "dependencies": {
+  "devDependencies": {
     "@symphony-ai/central-ds-react": "workspace:*",
     "@symphony-ai/central-ds-icons": "workspace:*",
-    "@symphony-ai/central-ds-variables": "workspace:*"
-  },
-  "devDependencies": {
+    "@symphony-ai/central-ds-variables": "workspace:*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "@types/react": "^18.3.0",
