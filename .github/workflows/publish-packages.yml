@@ -1,0 +1,175 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Publish Sub-Packages — Detects version changes in react/icons/variables
+# and publishes them to npm, then triggers central-ds update.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Publish Sub-Packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/react/package.json"
+      - "packages/icons/package.json"
+      - "packages/variables/package.json"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  detect-changes:
+    name: Detect version changes
+    runs-on: ubuntu-latest
+    outputs:
+      react-changed: ${{ steps.check.outputs.react-changed }}
+      icons-changed: ${{ steps.check.outputs.icons-changed }}
+      variables-changed: ${{ steps.check.outputs.variables-changed }}
+      any-changed: ${{ steps.check.outputs.any-changed }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for version changes
+        id: check
+        run: |
+          ANY_CHANGED=false
+
+          check_version_change() {
+            local pkg_path=$1
+            local output_key=$2
+            local old_version=$(git show HEAD~1:${pkg_path} 2>/dev/null | jq -r '.version' 2>/dev/null || echo "")
+            local new_version=$(jq -r '.version' ${pkg_path})
+            if [ "$old_version" != "$new_version" ] && [ -n "$new_version" ]; then
+              echo "${output_key}=true" >> $GITHUB_OUTPUT
+              echo "✅ ${pkg_path}: ${old_version} → ${new_version}"
+              ANY_CHANGED=true
+            else
+              echo "${output_key}=false" >> $GITHUB_OUTPUT
+              echo "⏭️  ${pkg_path}: no version change"
+            fi
+          }
+
+          check_version_change "packages/react/package.json" "react-changed"
+          check_version_change "packages/icons/package.json" "icons-changed"
+          check_version_change "packages/variables/package.json" "variables-changed"
+
+          echo "any-changed=${ANY_CHANGED}" >> $GITHUB_OUTPUT
+
+  publish-react:
+    name: Publish @symphony-ai/central-ds-react
+    needs: detect-changes
+    if: needs.detect-changes.outputs.react-changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @symphony-ai/central-ds-react build
+
+      - name: Publish
+        run: pnpm --filter @symphony-ai/central-ds-react publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-icons:
+    name: Publish @symphony-ai/central-ds-icons
+    needs: detect-changes
+    if: needs.detect-changes.outputs.icons-changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @symphony-ai/central-ds-icons build
+
+      - name: Publish
+        run: pnpm --filter @symphony-ai/central-ds-icons publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-variables:
+    name: Publish @symphony-ai/central-ds-variables
+    needs: detect-changes
+    if: needs.detect-changes.outputs.variables-changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @symphony-ai/central-ds-variables build
+
+      - name: Publish
+        run: pnpm --filter @symphony-ai/central-ds-variables publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  trigger-central-ds-update:
+    name: Trigger central-ds update
+    needs: [detect-changes, publish-react, publish-icons, publish-variables]
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      (needs.detect-changes.outputs.react-changed == 'true' ||
+       needs.detect-changes.outputs.icons-changed == 'true' ||
+       needs.detect-changes.outputs.variables-changed == 'true')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger central-ds publish workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          event-type: sub-package-published
+          client-payload: |
+            {
+              "react-changed": "${{ needs.detect-changes.outputs.react-changed }}",
+              "icons-changed": "${{ needs.detect-changes.outputs.icons-changed }}",
+              "variables-changed": "${{ needs.detect-changes.outputs.variables-changed }}"
+            }

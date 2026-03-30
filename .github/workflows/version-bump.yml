@@ -1,0 +1,85 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Version Bump — Manually bump a sub-package version and push to main.
+# This triggers the publish-packages workflow automatically.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package to bump"
+        required: true
+        type: choice
+        options:
+          - react
+          - icons
+          - variables
+          - all
+      bump:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    name: Bump version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump version(s)
+        id: bump
+        run: |
+          bump_package() {
+            local pkg_dir=$1
+            local pkg_json="${pkg_dir}/package.json"
+            local current=$(jq -r '.version' "$pkg_json")
+            local name=$(jq -r '.name' "$pkg_json")
+
+            IFS='.' read -r major minor patch <<< "$current"
+            case "${{ inputs.bump }}" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+            esac
+            local new_version="${major}.${minor}.${patch}"
+
+            jq --arg v "$new_version" '.version = $v' "$pkg_json" > "${pkg_json}.tmp" && mv "${pkg_json}.tmp" "$pkg_json"
+            echo "📦 ${name}: ${current} → ${new_version}"
+          }
+
+          PACKAGES="${{ inputs.package }}"
+
+          if [ "$PACKAGES" = "all" ]; then
+            bump_package "packages/react"
+            bump_package "packages/icons"
+            bump_package "packages/variables"
+          else
+            bump_package "packages/${PACKAGES}"
+          fi
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/*/package.json
+          git commit -m "chore: bump ${{ inputs.package }} version (${{ inputs.bump }})"
+          git push

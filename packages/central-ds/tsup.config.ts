@@ -1,0 +1,15 @@
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entry: {
+    index: "src/index.ts",
+    react: "src/react.ts",
+    icons: "src/icons.ts",
+    variables: "src/variables.ts",
+  },
+  format: ["esm", "cjs"],
+  dts: true,
+  sourcemap: true,
+  clean: true,
+  external: ["react", "react-dom"],
+});
