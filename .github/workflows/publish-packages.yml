@@ -85,7 +85,7 @@ jobs:
         run: pnpm --filter @symphony-ai/central-ds-react build
 
       - name: Publish
-        run: pnpm --filter @symphony-ai/central-ds-react publish --no-git-checks
+        run: pnpm --filter @symphony-ai/central-ds-react publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -116,7 +116,7 @@ jobs:
         run: pnpm --filter @symphony-ai/central-ds-icons build
 
       - name: Publish
-        run: pnpm --filter @symphony-ai/central-ds-icons publish --no-git-checks
+        run: pnpm --filter @symphony-ai/central-ds-icons publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -147,7 +147,7 @@ jobs:
         run: pnpm --filter @symphony-ai/central-ds-variables build
 
       - name: Publish
-        run: pnpm --filter @symphony-ai/central-ds-variables publish --no-git-checks
+        run: pnpm --filter @symphony-ai/central-ds-variables publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

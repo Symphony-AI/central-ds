@@ -129,7 +129,7 @@ jobs:
         run: pnpm --filter @symphony-ai/central-ds typecheck || true
 
       - name: Publish central-ds
-        run: pnpm --filter @symphony-ai/central-ds publish --no-git-checks
+        run: pnpm --filter @symphony-ai/central-ds publish --no-git-checks --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
